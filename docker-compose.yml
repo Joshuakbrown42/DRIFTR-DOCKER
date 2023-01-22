@@ -1,0 +1,364 @@
+version: '3.7'
+
+services:
+
+  # The 'setup' service runs a one-off script which initializes users inside
+  # Elasticsearch — such as 'logstash_internal' and 'kibana_system' — with the
+  # values of the passwords defined in the '.env' file.
+  #
+  # This task is only performed during the *initial* startup of the stack. On all
+  # subsequent runs, the service simply returns immediately, without performing
+  # any modification to existing users.
+  setup:
+    build:
+      context: setup/
+      args:
+        ELASTIC_VERSION: ${ELASTIC_VERSION}
+    init: true
+    volumes:
+      - ./setup/entrypoint.sh:/entrypoint.sh:ro,Z
+      - ./setup/helpers.sh:/helpers.sh:ro,Z
+      - ./setup/roles:/roles:ro,Z
+      - /setup:/state:Z
+    environment:
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
+      LOGSTASH_INTERNAL_PASSWORD: ${LOGSTASH_INTERNAL_PASSWORD:-}
+      KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:-}
+      METRICBEAT_INTERNAL_PASSWORD: ${METRICBEAT_INTERNAL_PASSWORD:-}
+      FILEBEAT_INTERNAL_PASSWORD: ${FILEBEAT_INTERNAL_PASSWORD:-}
+      HEARTBEAT_INTERNAL_PASSWORD: ${HEARTBEAT_INTERNAL_PASSWORD:-}
+      MONITORING_INTERNAL_PASSWORD: ${MONITORING_INTERNAL_PASSWORD:-}
+      BEATS_SYSTEM_PASSWORD: ${BEATS_SYSTEM_PASSWORD:-}
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+
+  elasticsearch:
+    build:
+      context: elasticsearch/
+      args:
+        ELASTIC_VERSION: ${ELASTIC_VERSION}
+    volumes:
+      - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro,Z
+      - ./vol/elasticsearch:/usr/share/elasticsearch/data:Z
+    ports:
+      - 9200:9200
+      - 9300:9300
+    environment:
+      node.name: elasticsearch
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      # Bootstrap password.
+      # Used to initialize the keystore during the initial startup of
+      # Elasticsearch. Ignored on subsequent runs.
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
+      # Use single node discovery in order to disable production mode and avoid bootstrap checks.
+      # see: https://www.elastic.co/guide/en/elasticsearch/reference/current/bootstrap-checks.html
+      discovery.type: single-node
+    container_name: elasticsearch
+    networks:
+      - elk
+    restart: unless-stopped
+
+  logstash:
+    build:
+      context: logstash/
+      args:
+        ELASTIC_VERSION: ${ELASTIC_VERSION}
+    volumes:
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro,Z
+      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro,Z
+    ports:
+      - 5044:5044
+      - 50000:50000/tcp
+      - 50000:50000/udp
+      - 9600:9600
+    environment:
+      LS_JAVA_OPTS: -Xms256m -Xmx256m
+      LOGSTASH_INTERNAL_PASSWORD: ${LOGSTASH_INTERNAL_PASSWORD:-}
+    container_name: logstash
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  kibana:
+    build:
+      context: kibana/
+      args:
+        ELASTIC_VERSION: ${ELASTIC_VERSION}
+    volumes:
+      - ./kibana/config/kibana.yml:/usr/share/kibana/config/kibana.yml:ro,Z
+    ports:
+      - 5601:5601
+    environment:
+      KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:-}
+    container_name: kibana
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    networks:
+      - elk
+
+  db:
+    image: mysql:8.0.19
+    command: --default-authentication-plugin=mysql_native_password
+    container_name: db
+    networks:
+      - elk
+    restart: always
+    environment:
+      - "MYSQL_USER=misp"
+      - "MYSQL_PASSWORD=example"
+      - "MYSQL_ROOT_PASSWORD=password"
+      - "MYSQL_DATABASE=misp"
+    volumes:
+      - ./vol/mysql_data:/var/lib/mysql
+    cap_add:
+      - SYS_NICE  # CAP_SYS_NICE Prevent runaway mysql log
+
+  misp:
+    image: coolacid/misp-docker:core-latest
+    container_name: misp
+    networks:
+      - elk
+    depends_on:
+      - redis
+      - db
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    volumes:
+      - /dev/urandom:/dev/random
+      - ./misp/server-configs/:/var/www/MISP/app/Config/
+      - ./vol/logs/:/var/www/MISP/app/tmp/logs/
+      - ./vol/files/:/var/www/MISP/app/files
+      - ./misp/ssl/:/etc/nginx/certs
+      - ./misp/clusters/:/var/www/MISP/app/files/misp-galaxy/clusters
+      - ./misp/galaxies/:/var/www/MISP/app/files/misp-galaxy/galaxies
+#      - "./examples/custom-entrypoint.sh:/custom-entrypoint.sh" # Use the example custom-entrypoint.sh
+    environment:
+      - HOSTNAME=https://localhost
+      - REDIS_FQDN=redis
+      - INIT=true             # Initialze MISP, things includes, attempting to import SQL and the Files DIR
+      - CRON_USER_ID=1        # The MISP user ID to run cron jobs as
+#      - "SYNCSERVERS=1 2 3 4"  # The MISP Feed servers to sync in the cron job
+      # Database Configuration (And their defaults)
+#      - "MYSQL_HOST=db"
+#      - "MYSQL_USER=misp"
+#      - "MYSQL_PASSWORD=example" # NOTE: This should be AlphaNum with no Special Chars. Otherwise, edit config files after first run. 
+#      - "MYSQL_DATABASE=misp"
+      # Optional Settings
+#      - "NOREDIR=true" # Do not redirect port 80
+#      - "DISIPV6=true" # Disable IPV6 in nginx
+#      - "CERTAUTH=optional" # Can be set to optional or on - Step 2 of https://github.com/MISP/MISP/tree/2.4/app/Plugin/CertAuth is still required
+#      - "SECURESSL=true" # Enable higher security SSL in nginx
+#      - "MISP_MODULES_FQDN=http://misp-modules" # Set the MISP Modules FQDN, used for Enrichment_services_url/Import_services_url/Export_services_url
+#      - "WORKERS=1" #If set to a value larger than 1 this will increase the number of parallel worker processes
+
+  misp-modules:
+    image: coolacid/misp-docker:modules-latest
+    container_name: misp-modules
+    networks:
+      - elk
+    environment:
+      - "REDIS_BACKEND=redis"
+    depends_on:
+      - redis
+      - db
+
+  cassandra:
+    image: 'cassandra:4'
+    container_name: cassandra
+    hostname: cassandra
+    networks:
+      - elk
+    environment:
+      - MAX_HEAP_SIZE=1G
+      - HEAP_NEWSIZE=1G
+      - CASSANDRA_CLUSTER_NAME=thp
+    volumes:
+      - './vol/cassandra/data:/var/lib/cassandra/data'
+
+  cerebro:
+    image: "lmenezes/cerebro"
+    container_name: cerebro
+    depends_on:
+      - elasticsearch
+    networks:
+      - elk
+    ports:
+      - "8999:9000"
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mailhog
+    networks:
+      - elk
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  postfix:
+    image: juanluisbaptiste/postfix:latest
+    container_name: postfix
+    networks:
+      - elk
+    ports:
+      - "25:25"
+    environment:
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_SERVER=mailhog
+      - SMTP_PORT=1025
+      - SERVER_HOSTNAME=smtp.localhost
+
+  postgres:
+    image: postgres:11
+    restart: always
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
+      - POSTGRES_NON_ROOT_USER
+      - POSTGRES_NON_ROOT_PASSWORD
+    volumes:
+      - ./vol/db_storage:/var/lib/postgresql/data
+      - ./postgres/init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  n8n:
+    image: n8nio/n8n
+    restart: always
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=n8nuser
+      - N8N_BASIC_AUTH_PASSWORD=password
+    ports:
+      - 5678:5678
+    links:
+      - postgres
+    volumes:
+      - ./vol/n8n_storage:/home/node/.n8n
+    command: /bin/sh -c "n8n start"
+
+  cortex:
+    image: thehiveproject/cortex:latest
+    restart: unless-stopped
+    container_name: cortex
+    environment:
+      - job_directory=/opt/cortex/jobs
+    volumes:
+      - cortexdata:/var/run/docker.sock
+      - cortexdata:/opt/cortex/jobs
+      - cortexdata:/var/log/cortex
+      - ./cortex/application.conf:/cortex/application.conf:ro,Z
+      - ./cortex/analyzers:/opt/analyzers
+      - ./cortex/responders:/opt/responders
+    depends_on:
+      - elasticsearch
+    ports:
+      - "0.0.0.0:9001:9001"
+    networks:
+      - elk
+
+  thehive:
+    image: strangebee/thehive:latest
+    restart: unless-stopped
+    container_name: thehive
+    networks:
+      - elk
+    depends_on:
+      - cassandra
+      - elasticsearch
+      - minio
+      - cortex
+    mem_limit: 1500m
+    ports:
+      - "0.0.0.0:9000:9000"
+    environment:
+      - JVM_OPTS="-Xms1024M -Xmx1024M"
+    links:
+      - misp
+    command:
+      - --secret
+      - "lab123456789"
+      - "--cql-hostnames"
+      - "cassandra"
+      - "--index-backend"
+      - "elasticsearch"
+      - "--es-hostnames"
+      - "elasticsearch"
+      - "--s3-endpoint"
+      - "http://minio:9100"
+      - "--s3-access-key"
+      - "miniadmin"
+      - "--s3-secret-key"
+      - "password"
+      - "--s3-use-path-access-style"
+      - "--no-config-cortex"
+      #- "--cortex-port"
+      #- "9001"
+      #- "--cortex-keys"
+      #- "k3DZO07qOoIMfNNS5qLloPmMS2PnhMMR"
+    volumes:
+      - ./thehive/application.conf:/etc/thehive/application.conf:ro,Z
+      #- ./thehive/misp.pem:/etc/thehive/misp.pem:ro,Z
+
+  minio:
+    image: quay.io/minio/minio
+    container_name: minio
+    networks:
+      - elk
+    restart: unless-stopped
+    command: ["minio", "server", "/data", "--console-address", ":9002"]
+    environment:
+      - MINIO_ROOT_USER=miniadmin
+      - MINIO_ROOT_PASSWORD=password
+    ports:
+      - "0.0.0.0:9100:9002"
+    volumes:
+      - "./vol/miniodata:/data"
+
+#  logspout:
+#    build:
+#      context: extensions/logspout
+#    volumes:
+#      - type: bind
+#        source: /var/run/docker.sock
+#        target: /var/run/docker.sock
+#        read_only: true
+#    environment:
+#      ROUTE_URIS: logstash://logstash:50000
+#      LOGSTASH_TAGS: docker-elk
+#    networks:
+#      - elk
+#    depends_on:
+#      - logstash
+#    restart: on-failure
+
+networks:
+  elk:
+    driver: bridge
+
+volumes:
+  setup:
+  elasticsearch:
+  cortexdata:
