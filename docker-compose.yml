@@ -270,8 +270,8 @@ services:
       - cortexdata:/opt/cortex/jobs
       - cortexdata:/var/log/cortex
       - ./cortex/application.conf:/cortex/application.conf:ro,Z
-      - ./cortex/analyzers:/opt/analyzers
-      - ./cortex/responders:/opt/responders
+      - ./cortex/analyzers:/opt/Cortex-Analyzers/analyzers
+      - ./cortex/responders:/opt/Cortex-Responders/responders
     depends_on:
       - elasticsearch
     ports:
