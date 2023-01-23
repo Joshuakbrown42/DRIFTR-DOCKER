@@ -267,8 +267,8 @@ services:
       - job_directory=/opt/cortex/jobs
     volumes:
       - cortexdata:/var/run/docker.sock
-      - cortexdata:/opt/cortex/jobs
-      - cortexdata:/var/log/cortex
+      - cortexjobs:/opt/cortex/jobs
+      - cortexlogs:/var/log/cortex
       - ./cortex/application.conf:/cortex/application.conf:ro,Z
       - ./cortex/analyzers:/opt/Cortex-Analyzers/analyzers
       - ./cortex/responders:/opt/Cortex-Responders/responders
@@ -362,3 +362,5 @@ volumes:
   setup:
   elasticsearch:
   cortexdata:
+  cortexlogs:
+  cortexjobs:
