@@ -19,7 +19,7 @@ services:
       - ./setup/entrypoint.sh:/entrypoint.sh:ro,Z
       - ./setup/helpers.sh:/helpers.sh:ro,Z
       - ./setup/roles:/roles:ro,Z
-      - /setup:/state:Z
+      - ./setup:/state:Z
     environment:
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
       LOGSTASH_INTERNAL_PASSWORD: ${LOGSTASH_INTERNAL_PASSWORD:-}
@@ -257,6 +257,8 @@ services:
       - postgres
     volumes:
       - ./vol/n8n_storage:/home/node/.n8n
+      - /var/log/:/var/log
+      - ./dropfolder:/dropfolder:ro
     command: /bin/sh -c "n8n start"
 
   cortex:
@@ -290,11 +292,11 @@ services:
       - elasticsearch
       - minio
       - cortex
-    mem_limit: 1500m
+    mem_limit: 4096m
     ports:
       - "0.0.0.0:9000:9000"
     environment:
-      - JVM_OPTS="-Xms1024M -Xmx1024M"
+      - JVM_OPTS="-Xms2048M -Xmx4096M"
     links:
       - misp
     command:
