@@ -203,8 +203,8 @@ services:
     networks:
       - elk
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - 0.0.0.0:1025:1025
+      - 0.0.0.0:8025:8025
 
   postfix:
     image: juanluisbaptiste/postfix:latest
@@ -212,17 +212,19 @@ services:
     networks:
       - elk
     ports:
-      - "25:25"
+      - 25:25
     environment:
       - SMTP_USERNAME=${SMTP_USERNAME}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - SMTP_SERVER=mailhog
       - SMTP_PORT=1025
-      - SERVER_HOSTNAME=smtp.localhost
+      - SERVER_HOSTNAME=smtp.mailhog
 
   postgres:
     image: postgres:11
     restart: always
+    networks:
+      - elk
     environment:
       - POSTGRES_USER
       - POSTGRES_PASSWORD
@@ -241,6 +243,8 @@ services:
   n8n:
     image: n8nio/n8n
     restart: always
+    networks:
+      - elk
     environment:
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres
@@ -253,29 +257,32 @@ services:
       - N8N_BASIC_AUTH_PASSWORD=password
     ports:
       - 5678:5678
-    links:
-      - postgres
+#    links:
+#      - postgres
     volumes:
       - ./vol/n8n_storage:/home/node/.n8n
-      - /var/log/:/var/log
+      - /var/log:/var/log:ro
+      - /var/log/auditbeat:/var/log/auditbeat:ro
       - ./dropfolder:/dropfolder:ro
     command: /bin/sh -c "n8n start"
 
   cortex:
-    image: thehiveproject/cortex:latest
+    image: thehiveproject/cortex:3.1.7-withdeps
     restart: unless-stopped
     container_name: cortex
     environment:
-      - job_directory=/opt/cortex/jobs
+      - job_directory=${JOB_DIRECTORY}
+      - docker-job-directory=/var/run/cortex/jobs
     volumes:
-      - cortexdata:/var/run/docker.sock
-      - cortexjobs:/opt/cortex/jobs
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - ${JOB_DIRECTORY}:${JOB_DIRECTORY}
       - cortexlogs:/var/log/cortex
       - ./cortex/application.conf:/cortex/application.conf:ro,Z
-      - ./cortex/analyzers:/opt/Cortex-Analyzers/analyzers
-      - ./cortex/responders:/opt/Cortex-Responders/responders
+      - ./cortex/analyzers:/opt/Cortex-Analyzers/analyzers:ro
+      - ./cortex/responders:/opt/Cortex-Responders/responders:ro
     depends_on:
       - elasticsearch
+    command: --job-directory ${JOB_DIRECTORY}
     ports:
       - "0.0.0.0:9001:9001"
     networks:
@@ -366,3 +373,4 @@ volumes:
   cortexdata:
   cortexlogs:
   cortexjobs:
+  docker-job-directory:
