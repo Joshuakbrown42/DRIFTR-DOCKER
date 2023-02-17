@@ -346,6 +346,20 @@ services:
     volumes:
       - "./vol/miniodata:/data"
 
+  caldera:
+    image: joshuabrown42/caldera:server
+    container_name: caldera
+    ports:
+      - 8888:8888
+      - 2222:2222
+      - 7010:7010
+      - 7011:7011
+      - 7012:7012
+      - 8022:8022
+    networks:
+      - elk
+
+
 
 networks:
   elk:
