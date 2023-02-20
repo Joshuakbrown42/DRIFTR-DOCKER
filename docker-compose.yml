@@ -30,7 +30,8 @@ services:
       MONITORING_INTERNAL_PASSWORD: ${MONITORING_INTERNAL_PASSWORD:-}
       BEATS_SYSTEM_PASSWORD: ${BEATS_SYSTEM_PASSWORD:-}
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.49
     depends_on:
       - elasticsearch
 
@@ -57,7 +58,8 @@ services:
       discovery.type: single-node
     container_name: elasticsearch
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.50
     restart: unless-stopped
 
   logstash:
@@ -78,7 +80,8 @@ services:
       LOGSTASH_INTERNAL_PASSWORD: ${LOGSTASH_INTERNAL_PASSWORD:-}
     container_name: logstash
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.51
     depends_on:
       - elasticsearch
     restart: unless-stopped
@@ -96,7 +99,8 @@ services:
       KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:-}
     container_name: kibana
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.52
     depends_on:
       - elasticsearch
     restart: unless-stopped
@@ -105,14 +109,16 @@ services:
     image: redis:latest
     container_name: redis
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.53
 
   db:
     image: mysql:8.0.19
     command: --default-authentication-plugin=mysql_native_password
     container_name: db
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.54
     restart: always
     environment:
       - "MYSQL_USER=misp"
@@ -128,7 +134,8 @@ services:
     image: coolacid/misp-docker:core-latest
     container_name: misp
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.55
     depends_on:
       - redis
       - db
@@ -153,7 +160,7 @@ services:
       # Database Configuration (And their defaults)
 #      - "MYSQL_HOST=db"
 #      - "MYSQL_USER=misp"
-#      - "MYSQL_PASSWORD=example" # NOTE: This should be AlphaNum with no Special Chars. Otherwise, edit config files after first run. 
+#      - "MYSQL_PASSWORD=example" # NOTE: This should be AlphaNum with no Special Chars. Otherwise, edit config files after first run.
 #      - "MYSQL_DATABASE=misp"
       # Optional Settings
 #      - "NOREDIR=true" # Do not redirect port 80
@@ -167,7 +174,8 @@ services:
     image: coolacid/misp-docker:modules-latest
     container_name: misp-modules
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.56
     environment:
       - "REDIS_BACKEND=redis"
     depends_on:
@@ -179,7 +187,8 @@ services:
     container_name: cassandra
     hostname: cassandra
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.57
     environment:
       - MAX_HEAP_SIZE=1G
       - HEAP_NEWSIZE=1G
@@ -193,7 +202,8 @@ services:
     depends_on:
       - elasticsearch
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.58
     ports:
       - "8999:9000"
 
@@ -201,7 +211,8 @@ services:
     image: mailhog/mailhog:latest
     container_name: mailhog
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.59
     ports:
       - 0.0.0.0:1025:1025
       - 0.0.0.0:8025:8025
@@ -210,7 +221,8 @@ services:
     image: juanluisbaptiste/postfix:latest
     container_name: postfix
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.60
     ports:
       - 25:25
     environment:
@@ -224,7 +236,8 @@ services:
     image: postgres:11
     restart: always
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.61
     environment:
       - POSTGRES_USER
       - POSTGRES_PASSWORD
@@ -244,7 +257,8 @@ services:
     image: n8nio/n8n
     restart: always
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.62
     environment:
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres
@@ -286,14 +300,16 @@ services:
     ports:
       - "0.0.0.0:9001:9001"
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.63
 
   thehive:
     image: strangebee/thehive:latest
     restart: unless-stopped
     container_name: thehive
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.64
     depends_on:
       - cassandra
       - elasticsearch
@@ -335,7 +351,8 @@ services:
     image: quay.io/minio/minio
     container_name: minio
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.65
     restart: unless-stopped
     command: ["minio", "server", "/data", "--console-address", ":9002"]
     environment:
@@ -357,13 +374,18 @@ services:
       - 7012:7012
       - 8022:8022
     networks:
-      - elk
+      elk:
+       ipv4_address: 172.10.50.66
 
 
 
 networks:
   elk:
     driver: bridge
+    ipam:
+      config:
+         - subnet: 172.10.0.0/16
+           gateway: 172.10.0.1
 
 volumes:
   setup:
