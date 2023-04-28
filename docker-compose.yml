@@ -272,8 +272,6 @@ services:
       - N8N_BASIC_AUTH_PASSWORD=password
     ports:
       - 5678:5678
-#    links:
-#      - postgres
     volumes:
       - ./vol/n8n_storage:/home/node/.n8n
       - /var/log:/var/log:ro
@@ -285,9 +283,10 @@ services:
     image: thehiveproject/cortex:3.1.7-withdeps
     restart: unless-stopped
     container_name: cortex
+    env_file: .env
     environment:
       - job_directory=${JOB_DIRECTORY}
-      - docker-job-directory=/var/run/cortex/jobs
+      - docker-job-directory=/tmp/cortex/jobs
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - ${JOB_DIRECTORY}:${JOB_DIRECTORY}
