@@ -48,6 +48,7 @@ services:
       - 9300:9300
     environment:
       node.name: elasticsearch
+      script.allowed_types: inline
       ES_JAVA_OPTS: -Xms512m -Xmx512m
       # Bootstrap password.
       # Used to initialize the keystore during the initial startup of
@@ -382,7 +383,7 @@ services:
     restart: unless-stopped
     env_file: .env
     depends_on:
-      db:
+      deciderdb:
         condition: service_healthy
     build:
       context: .
