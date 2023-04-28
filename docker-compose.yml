@@ -49,7 +49,7 @@ services:
     environment:
       node.name: elasticsearch
       script.allowed_types: inline
-      ES_JAVA_OPTS: -Xms2g -Xmx6g
+      ES_JAVA_OPTS: -Xms512m -Xmx6g
       # Bootstrap password.
       # Used to initialize the keystore during the initial startup of
       # Elasticsearch. Ignored on subsequent runs.
