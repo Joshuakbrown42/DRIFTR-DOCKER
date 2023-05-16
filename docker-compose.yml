@@ -282,7 +282,7 @@ services:
     command: /bin/sh -c "n8n start"
 
   cortex:
-    image: thehiveproject/cortex:3.1.7-withdeps
+    image: thehiveproject/cortex:3.1-withdeps
     restart: unless-stopped
     container_name: cortex
     env_file: .env
