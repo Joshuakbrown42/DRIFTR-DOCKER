@@ -306,7 +306,7 @@ services:
        ipv4_address: 172.10.50.63
 
   thehive:
-    image: strangebee/thehive:latest
+    image: strangebee/thehive:5.1.0
     restart: unless-stopped
     container_name: thehive
     networks:
